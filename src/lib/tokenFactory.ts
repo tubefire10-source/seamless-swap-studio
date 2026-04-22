@@ -1,7 +1,15 @@
-// TokenFactory contract on Sepolia (Chain ID: 11155111)
-export const TOKEN_FACTORY_ADDRESS = "0x60dd65bad8a73dfd8df029c4e3b372d575b03bc2";
-export const TOKEN_FACTORY_CHAIN_ID = 11155111; // Sepolia
-export const SEPOLIA_EXPLORER = "https://sepolia.etherscan.io";
+import { EXPLORER_URL, LITVM_CHAIN_ID, RPC_URL } from "./litvm";
+
+// TokenFactory contract on LitVM LiteForge (Chain ID: 4441)
+export const TOKEN_FACTORY_ADDRESS = "0xafb82a10118544E22596F5eF335B648ea1eBbE7a";
+export const TOKEN_FACTORY_CHAIN_ID = LITVM_CHAIN_ID; // 4441
+export const TOKEN_FACTORY_EXPLORER = EXPLORER_URL;
+export const TOKEN_FACTORY_RPC = RPC_URL;
+export const TOKEN_FACTORY_NATIVE_SYMBOL = "zkLTC";
+export const TOKEN_FACTORY_DEFAULT_FEE = "0.05";
+
+// Kept for backwards compat (older imports referenced SEPOLIA_EXPLORER)
+export const SEPOLIA_EXPLORER = EXPLORER_URL;
 
 export const TOKEN_FACTORY_ABI = [
   "function deployFee() view returns (uint256)",
