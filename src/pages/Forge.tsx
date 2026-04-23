@@ -417,10 +417,10 @@ export default function Forge() {
             data: log.data as Hex,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             topics: (log as any).topics,
-          });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          }) as any;
           if (decoded.eventName === "ContractDeployed") {
-            const a = (decoded.args as unknown as { contractAddress: `0x${string}` }).contractAddress;
-            deployedAddr = a;
+            deployedAddr = decoded.args.contractAddress as `0x${string}`;
             break;
           }
         } catch {
