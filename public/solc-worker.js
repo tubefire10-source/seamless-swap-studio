@@ -150,6 +150,13 @@ self.onmessage = async (e) => {
       const cbPtr = makeReadCallback();
       let outStr;
       try {
+        // Reset any prior compiler state inside the wasm module (defensive —
+        // prevents "another CompilerStack aside me" if solc was ever invoked
+        // before in this worker).
+        try {
+          const reset = self.Module.cwrap("solidity_reset", null, []);
+          reset();
+        } catch { /* not all builds export it */ }
         outStr = solidity_compile(JSON.stringify(input), cbPtr, 0);
       } finally {
         try { self.Module.removeFunction(cbPtr); } catch { /* ignore */ }

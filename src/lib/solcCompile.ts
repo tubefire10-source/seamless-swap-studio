@@ -7,37 +7,34 @@ export type CompileResult = {
   warnings: string[];
 };
 
-let worker: Worker | null = null;
 let nextId = 1;
-const pending = new Map<number, { resolve: (r: CompileResult) => void; reject: (e: Error) => void }>();
-
-function getWorker(): Worker {
-  if (worker) return worker;
-  worker = new Worker("/solc-worker.js");
-  worker.onmessage = (e: MessageEvent) => {
-    const { id, ok, result, error } = e.data || {};
-    const p = pending.get(id);
-    if (!p) return;
-    pending.delete(id);
-    if (ok) p.resolve(result);
-    else p.reject(new Error(error || "Compilation failed"));
-  };
-  worker.onerror = (e) => {
-    // eslint-disable-next-line no-console
-    console.error("solc worker error", e);
-  };
-  return worker;
-}
 
 export function compileSolidity(args: {
   source: string;
   fileName: string;
   contractName: string;
 }): Promise<CompileResult> {
+  // Spawn a fresh worker per compile. solc's internal CompilerStack is a
+  // singleton inside the wasm module and cannot be safely reused across
+  // compiles ("You shall not have another CompilerStack aside me").
+  // Cost is just the JS worker boot — soljson itself is HTTP-cached.
+  const worker = new Worker("/solc-worker.js");
   const id = nextId++;
-  const w = getWorker();
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
-    w.postMessage({ id, type: "compile", payload: args });
+    const cleanup = () => {
+      try { worker.terminate(); } catch { /* ignore */ }
+    };
+    worker.onmessage = (e: MessageEvent) => {
+      const { ok, result, error } = e.data || {};
+      cleanup();
+      if (ok) resolve(result);
+      else reject(new Error(error || "Compilation failed"));
+    };
+    worker.onerror = (e) => {
+      cleanup();
+      reject(new Error(e.message || "Worker crashed"));
+    };
+    worker.postMessage({ id, type: "compile", payload: args });
   });
 }
+
