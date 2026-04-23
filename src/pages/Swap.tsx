@@ -18,7 +18,7 @@ import {
 } from "@/lib/litvm";
 
 type TokenMeta = { address: string; symbol: string; decimals: number; balance: string };
-type Status = { kind: "idle" | "info" | "ok" | "error"; msg: string };
+type Status = { kind: "idle" | "info" | "ok" | "error"; msg: string; txHash?: string };
 
 const readProvider = new JsonRpcProvider(RPC_URL);
 
@@ -420,11 +420,13 @@ export default function Swap() {
         tx = await router.swapExactTokensForTokens(inWei, minOut, path, walletAddr, deadline);
       }
 
-      setStatus({ kind: "info", msg: "Confirming… " + tx.hash.slice(0, 12) + "…" });
+      setStatus({ kind: "info", msg: "Confirming… " + tx.hash.slice(0, 12) + "…", txHash: tx.hash });
       const receipt = await tx.wait();
+      const finalHash = receipt?.hash ?? tx.hash;
       setStatus({
         kind: "ok",
-        msg: `Swap confirmed! tx ${shortAddr(receipt?.hash ?? tx.hash)}`,
+        msg: `Swap confirmed! tx ${shortAddr(finalHash)}`,
+        txHash: finalHash,
       });
       setAmountIn(""); setAmountOut("");
       const [m1, m2] = await Promise.all([
@@ -644,7 +646,7 @@ export default function Swap() {
           {/* Status */}
           {status.kind !== "idle" && status.msg && (
             <div
-              className={`mt-4 rounded-xl border px-3 py-2.5 text-xs ${
+              className={`mt-4 flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5 text-xs ${
                 status.kind === "error"
                   ? "border-destructive/40 bg-destructive/10 text-destructive"
                   : status.kind === "ok"
@@ -652,7 +654,17 @@ export default function Swap() {
                   : "border-primary/30 bg-primary/10 text-primary"
               }`}
             >
-              {status.msg}
+              <span className="min-w-0 break-words">{status.msg}</span>
+              {status.txHash && (
+                <a
+                  href={`${EXPLORER_URL}/tx/${status.txHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-current/40 px-2 py-1 font-medium hover:bg-current/10"
+                >
+                  Explorer <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
             </div>
           )}
 
