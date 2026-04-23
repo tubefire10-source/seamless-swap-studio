@@ -366,7 +366,7 @@ export default function Forge() {
                 <span className="status-dot" /> LitVM 4441
               </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" size="sm" onClick={onCopy} className="gap-1.5">
                 {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
                 {copied ? "Copied" : "Copy"}
@@ -374,10 +374,23 @@ export default function Forge() {
               <Button variant="outline" size="sm" onClick={onDownload} className="gap-1.5">
                 <Download className="h-3.5 w-3.5" /> Download
               </Button>
-              <Button asChild size="sm" className="gap-1.5 bg-gradient-violet shadow-glow-violet hover:opacity-90">
+              <Button asChild variant="outline" size="sm" className="gap-1.5">
                 <a href="https://remix.ethereum.org" target="_blank" rel="noreferrer">
-                  <ExternalLink className="h-3.5 w-3.5" /> Open in Remix
+                  <ExternalLink className="h-3.5 w-3.5" /> Remix
                 </a>
+              </Button>
+              <Button
+                size="sm"
+                onClick={onDeploy}
+                disabled={deploy.kind === "compiling" || deploy.kind === "deploying"}
+                className="gap-1.5 bg-gradient-violet shadow-glow-violet hover:opacity-90"
+              >
+                {deploy.kind === "compiling" || deploy.kind === "deploying" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Rocket className="h-3.5 w-3.5" />
+                )}
+                Deploy on LitVM
               </Button>
             </div>
           </div>
