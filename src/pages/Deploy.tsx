@@ -1,10 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { BrowserProvider, Contract, formatUnits, parseEther } from "ethers";
+import { BrowserProvider, Contract, JsonRpcProvider, formatUnits } from "ethers";
 import { useAccount, useChainId, useSwitchChain } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
 import {
   Rocket,
-  Loader2,
   CheckCircle2,
   AlertTriangle,
   ExternalLink,
@@ -12,19 +10,20 @@ import {
   Flame,
   Pause,
   Play,
-  Plus,
-  Users,
+  ArrowLeft,
+  ArrowRight,
+  Loader2,
+  X,
   Wallet,
+  Users,
+  Plus,
   Coins,
 } from "lucide-react";
 import {
   TOKEN_FACTORY_ABI,
   TOKEN_FACTORY_ADDRESS,
   TOKEN_FACTORY_CHAIN_ID,
-  TOKEN_FACTORY_EXPLORER,
   TOKEN_FACTORY_RPC,
-  TOKEN_FACTORY_NATIVE_SYMBOL,
-  TOKEN_FACTORY_DEFAULT_FEE,
   CUSTOM_TOKEN_ABI,
   type TokenInfo,
 } from "@/lib/tokenFactory";
@@ -62,40 +61,158 @@ function getEthereum(): { request: (args: { method: string; params?: unknown[] }
   return (window as unknown as { ethereum?: { request: (args: { method: string; params?: unknown[] }) => Promise<unknown> } }).ethereum ?? null;
 }
 
-const LITVM_CHAIN_HEX = "0x" + TOKEN_FACTORY_CHAIN_ID.toString(16);
-
-async function ensureLitVM() {
-  const eth = getEthereum();
-  if (!eth) throw new Error("No wallet detected");
-  try {
-    await eth.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: LITVM_CHAIN_HEX }],
-    });
-  } catch (err: unknown) {
-    const e = err as { code?: number };
-    if (e?.code === 4902) {
-      await eth.request({
-        method: "wallet_addEthereumChain",
-        params: [
-          {
-            chainId: LITVM_CHAIN_HEX,
-            chainName: "LitVM LiteForge",
-            nativeCurrency: { name: "zkLTC", symbol: TOKEN_FACTORY_NATIVE_SYMBOL, decimals: 18 },
-            rpcUrls: [TOKEN_FACTORY_RPC],
-            blockExplorerUrls: [TOKEN_FACTORY_EXPLORER],
-          },
-        ],
-      });
-    } else {
-      throw err;
-    }
-  }
-}
-
 function copyText(text: string, label = "Copied") {
   navigator.clipboard.writeText(text);
   toast({ title: label, description: text });
+}
+
+/** Step indicator pill */
+function StepDot({ n, label, state }: { n: number; label: string; state: "done" | "active" | "todo" }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div
+        className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-all ${
+          state === "done"
+            ? "bg-green text-background shadow-[0_0_18px_-2px_hsl(var(--green))]"
+            : state === "active"
+            ? "bg-gradient-violet text-primary-foreground shadow-glow-violet"
+            : "border border-border bg-surface text-muted-foreground"
+        }`}
+      >
+        {state === "done" ? <CheckCircle2 className="h-4 w-4" /> : n}
+      </div>
+      <span
+        className={`text-sm font-medium transition-colors ${
+          state === "active" ? "text-foreground" : state === "done" ? "text-green" : "text-muted-foreground"
+        }`}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+/** Live preview card on the right */
+function LivePreview({ form }: { form: FormState }) {
+  const initial = (form.symbol || form.name || "?").charAt(0).toUpperCase();
+  return (
+    <div className="panel-elevated p-5">
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-primary">
+        <span className="status-dot" /> Live preview
+      </div>
+
+      <div className="mt-6 flex flex-col items-center text-center">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-gradient-violet text-3xl font-bold text-primary-foreground shadow-glow-violet">
+          {initial}
+        </div>
+        <div className="mt-3 font-display text-2xl text-foreground">{form.name || "Token Name"}</div>
+        <div className="text-sm font-medium text-primary">{form.symbol || "SYMBOL"}</div>
+      </div>
+
+      <div className="mt-6 space-y-3 border-t border-border/40 pt-4 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Total Supply</span>
+          <span className="font-mono text-foreground">
+            {form.totalSupply ? Number(form.totalSupply).toLocaleString() : "—"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Decimals</span>
+          <span className="font-mono text-foreground">{form.decimals}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Standard</span>
+          <span className="font-mono text-foreground">ERC-20</span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-1.5">
+        {[
+          { k: "mintable", l: "Mintable" },
+          { k: "burnable", l: "Burnable" },
+          { k: "pausable", l: "Pausable" },
+        ].map((f) => {
+          const on = form[f.k as keyof FormState] as boolean;
+          return (
+            <span
+              key={f.k}
+              className={`rounded-full px-2.5 py-0.5 text-[10px] uppercase tracking-wider transition-colors ${
+                on
+                  ? "border border-green/40 bg-green/10 text-green"
+                  : "border border-border bg-surface text-muted-foreground/60"
+              }`}
+            >
+              {f.l}
+            </span>
+          );
+        })}
+      </div>
+
+      <div className="mt-5 flex items-center gap-2 rounded-xl border border-primary/20 bg-primary/5 p-3 text-xs">
+        <span className="status-dot" />
+        <span className="text-muted-foreground">Deploying to</span>
+        <span className="font-medium text-primary">LitVM Testnet</span>
+      </div>
+    </div>
+  );
+}
+
+/** Submit / success modal */
+function SubmitModal({
+  open,
+  onClose,
+  status,
+}: {
+  open: boolean;
+  onClose: () => void;
+  status: Status;
+}) {
+  if (!open) return null;
+  const ok = status.kind === "ok";
+  const err = status.kind === "error";
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-4 backdrop-blur-md animate-fade-in">
+      <div className="w-full max-w-sm panel-elevated p-6 text-center animate-scale-in">
+        <button onClick={onClose} className="absolute right-3 top-3 text-muted-foreground hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+        <div className="flex justify-center">
+          {ok ? (
+            <CheckCircle2 className="h-12 w-12 text-green" />
+          ) : err ? (
+            <AlertTriangle className="h-12 w-12 text-destructive" />
+          ) : (
+            <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          )}
+        </div>
+        <h3 className="mt-4 font-display text-2xl">
+          {ok ? "Success" : err ? "Failed" : "Submitting…"}
+        </h3>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {status.kind === "info" || status.kind === "idle"
+            ? "Confirm the transaction in your wallet…"
+            : status.kind === "ok"
+            ? status.msg
+            : status.kind === "error"
+            ? status.msg
+            : ""}
+        </p>
+        {ok && status.tx && (
+          <a
+            href={`${EXPLORER_URL}/tx/${status.tx}`}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+          >
+            View transaction <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        )}
+        <button onClick={onClose} className="btn-primary mt-5 w-full">
+          Done
+        </button>
+      </div>
+    </div>
+  );
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -107,6 +224,8 @@ export default function Deploy() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM);
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [busy, setBusy] = useState(false);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [showModal, setShowModal] = useState(false);
   const [deployFee, setDeployFee] = useState<string>("0.05");
   const [totalDeployed, setTotalDeployed] = useState<number | null>(null);
   const [myTokens, setMyTokens] = useState<TokenInfo[]>([]);
@@ -118,13 +237,12 @@ export default function Deploy() {
   const update = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
-  // Load factory stats + tokens via public RPC (read-only, doesn't need wallet on LitVM)
+  // Load factory stats + tokens via public RPC
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const { JsonRpcProvider } = await import("ethers");
-        const provider = new JsonRpcProvider("https://api.republicstats.xyz/litvm/rpc");
+        const provider = new JsonRpcProvider(TOKEN_FACTORY_RPC);
         const factory = new Contract(TOKEN_FACTORY_ADDRESS, TOKEN_FACTORY_ABI, provider);
 
         const [fee, total] = await Promise.all([
@@ -135,31 +253,23 @@ export default function Deploy() {
         setDeployFee(formatUnits(fee, 18));
         setTotalDeployed(Number(total));
 
-        // Load all tokens (last 20)
         const all = (await factory.getAllTokens()) as string[];
         const recent = all.slice(-20).reverse();
         const infos = await Promise.all(
           recent.map(async (addr) => {
-            try {
-              return (await factory.getTokenInfo(addr)) as TokenInfo;
-            } catch {
-              return null;
-            }
+            try { return (await factory.getTokenInfo(addr)) as TokenInfo; }
+            catch { return null; }
           })
         );
         if (cancelled) return;
         setAllTokens(infos.filter((i): i is TokenInfo => i !== null));
 
-        // Load my tokens
         if (address) {
           const mine = (await factory.getTokensByCreator(address)) as string[];
           const myInfos = await Promise.all(
             mine.map(async (addr) => {
-              try {
-                return (await factory.getTokenInfo(addr)) as TokenInfo;
-              } catch {
-                return null;
-              }
+              try { return (await factory.getTokenInfo(addr)) as TokenInfo; }
+              catch { return null; }
             })
           );
           if (cancelled) return;
@@ -171,44 +281,35 @@ export default function Deploy() {
         console.error("Factory load failed:", e);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [address, refreshKey]);
 
-  async function onDeploy(e: React.FormEvent) {
-    e.preventDefault();
+  const supplyPreview = useMemo(() => {
+    if (!/^\d+$/.test(form.totalSupply)) return null;
+    try { return BigInt(form.totalSupply).toLocaleString("en-US"); } catch { return null; }
+  }, [form.totalSupply]);
+
+  const step1Valid = form.name.trim() && form.symbol.trim() && /^\d+$/.test(form.totalSupply) && BigInt(form.totalSupply || "0") > 0n;
+
+  async function onDeploy() {
     if (!isConnected) {
       setStatus({ kind: "error", msg: "Connect wallet first" });
+      setShowModal(true);
       return;
     }
     const eth = getEthereum();
     if (!eth) {
       setStatus({ kind: "error", msg: "No wallet detected" });
+      setShowModal(true);
       return;
     }
 
-    const name = form.name.trim();
-    const symbol = form.symbol.trim();
-    const decimals = parseInt(form.decimals, 10);
-    const supply = form.totalSupply.trim();
-
-    if (!name) return setStatus({ kind: "error", msg: "Name required" });
-    if (!symbol) return setStatus({ kind: "error", msg: "Symbol required" });
-    if (!Number.isFinite(decimals) || decimals < 0 || decimals > 18)
-      return setStatus({ kind: "error", msg: "Decimals must be 0-18" });
-    if (!/^\d+$/.test(supply) || BigInt(supply) <= 0n)
-      return setStatus({ kind: "error", msg: "Supply must be a positive integer" });
-
     setBusy(true);
+    setShowModal(true);
     setStatus({ kind: "info", msg: "Switching to LitVM…" });
     try {
       if (!onLitVM) {
-        try {
-          await switchChain({ chainId: TOKEN_FACTORY_CHAIN_ID });
-        } catch {
-          await ensureLitVM();
-        }
+        await switchChain({ chainId: TOKEN_FACTORY_CHAIN_ID });
       }
 
       setStatus({ kind: "info", msg: "Preparing transaction…" });
@@ -218,12 +319,12 @@ export default function Deploy() {
 
       const fee = (await factory.deployFee()) as bigint;
 
-      setStatus({ kind: "info", msg: `Deploying ${symbol}… confirm in wallet (${formatUnits(fee, 18)} zkLTC fee)` });
+      setStatus({ kind: "info", msg: `Deploying ${form.symbol}… confirm in wallet (${formatUnits(fee, 18)} zkLTC fee)` });
       const tx = await factory.deployToken(
-        name,
-        symbol,
-        decimals,
-        BigInt(supply),
+        form.name.trim(),
+        form.symbol.trim(),
+        parseInt(form.decimals, 10),
+        BigInt(form.totalSupply),
         form.mintable,
         form.burnable,
         form.pausable,
@@ -233,7 +334,6 @@ export default function Deploy() {
 
       const receipt = await tx.wait();
 
-      // Parse event for token address
       let tokenAddr: string | undefined;
       try {
         for (const log of receipt?.logs ?? []) {
@@ -243,18 +343,19 @@ export default function Deploy() {
               tokenAddr = parsed.args[0] as string;
               break;
             }
-          } catch { /* not our event */ }
+          } catch { /* ignore */ }
         }
       } catch { /* ignore */ }
 
       setStatus({
         kind: "ok",
-        msg: `${symbol} deployed successfully!`,
+        msg: `${form.symbol} deployed successfully!`,
         tx: tx.hash,
         tokenAddr,
       });
-      toast({ title: "Token deployed!", description: `${symbol} live on LitVM` });
+      toast({ title: "Token deployed!", description: `${form.symbol} live on LitVM` });
       setForm(DEFAULT_FORM);
+      setStep(1);
       setRefreshKey((k) => k + 1);
     } catch (e) {
       setStatus({ kind: "error", msg: errMsg(e) });
@@ -267,10 +368,7 @@ export default function Deploy() {
     const eth = getEthereum();
     if (!eth) return toast({ title: "No wallet", description: "Connect wallet first" });
     try {
-      if (!onLitVM) {
-        try { await switchChain({ chainId: TOKEN_FACTORY_CHAIN_ID }); }
-        catch { await ensureLitVM(); }
-      }
+      if (!onLitVM) await switchChain({ chainId: TOKEN_FACTORY_CHAIN_ID });
       const provider = new BrowserProvider(eth as unknown as ConstructorParameters<typeof BrowserProvider>[0]);
       const signer = await provider.getSigner();
       const token = new Contract(tokenAddr, CUSTOM_TOKEN_ABI, signer);
@@ -294,40 +392,32 @@ export default function Deploy() {
     }
   }
 
-  const supplyPreview = useMemo(() => {
-    if (!/^\d+$/.test(form.totalSupply)) return null;
-    try {
-      return BigInt(form.totalSupply).toLocaleString("en-US");
-    } catch {
-      return null;
-    }
-  }, [form.totalSupply]);
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
       <header className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-muted-foreground">
-            <Rocket className="h-3.5 w-3.5 text-primary" />
-            Token Deployer
+          <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 text-xs uppercase tracking-[0.25em] text-primary">
+            <Rocket className="h-3 w-3" /> Token Launchpad
           </div>
-          <h1 className="font-display text-4xl text-gradient-fire md:text-5xl">Deploy ERC-20</h1>
+          <h1 className="mt-3 font-display text-5xl">
+            Deploy <span className="text-gradient-aurora">ERC-20</span>
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            One-click ERC-20 factory · {deployFee} zkLTC fee · LitVM testnet
+            Launch your token in seconds · {deployFee} zkLTC fee · LitVM testnet
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <div className="rounded-sm border border-border bg-surface px-3 py-2 text-xs">
-            <div className="text-muted-foreground">Total Deployed</div>
-            <div className="font-display text-xl text-primary">{totalDeployed ?? "—"}</div>
+          <div className="rounded-xl border border-border/60 bg-surface/60 px-4 py-2.5 text-xs backdrop-blur">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total Deployed</div>
+            <div className="mt-0.5 font-display text-2xl text-gradient-violet">{totalDeployed ?? "—"}</div>
           </div>
-          <div className="rounded-sm border border-border bg-surface px-3 py-2 text-xs">
-            <div className="text-muted-foreground">Factory</div>
+          <div className="rounded-xl border border-border/60 bg-surface/60 px-4 py-2.5 text-xs backdrop-blur">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Factory</div>
             <button
               onClick={() => copyText(TOKEN_FACTORY_ADDRESS, "Factory address copied")}
-              className="flex items-center gap-1 font-mono text-sm text-foreground hover:text-primary"
+              className="mt-0.5 flex items-center gap-1 font-mono text-sm text-foreground hover:text-primary"
             >
               {shortAddr(TOKEN_FACTORY_ADDRESS)}
               <Copy className="h-3 w-3" />
@@ -338,386 +428,381 @@ export default function Deploy() {
 
       {/* Network warning */}
       {isConnected && !onLitVM && (
-        <div className="flex items-start gap-3 rounded-sm border border-fire/40 bg-fire/10 px-4 py-3 text-sm">
+        <div className="flex items-start gap-3 rounded-xl border border-fire/40 bg-fire/10 px-4 py-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-fire" />
           <div className="flex-1">
             <div className="font-medium text-foreground">Wrong network</div>
-            <div className="text-xs text-muted-foreground">
-              TokenFactory lives on LitVM LiteForge (Chain 4441). Switch network to deploy.
-            </div>
+            <div className="text-xs text-muted-foreground">TokenFactory lives on LitVM LiteForge (Chain 4441).</div>
           </div>
           <button
             onClick={() => switchChain({ chainId: TOKEN_FACTORY_CHAIN_ID })}
-            className="rounded-sm border border-fire bg-fire/20 px-3 py-1.5 text-xs font-medium text-fire hover:bg-fire/30"
+            className="rounded-lg border border-fire bg-fire/20 px-3 py-1.5 text-xs font-medium text-fire hover:bg-fire/30"
           >
-            Switch to LitVM
+            Switch network
           </button>
         </div>
       )}
 
-      <Tabs defaultValue="deploy" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="deploy">
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Deploy
-          </TabsTrigger>
-          <TabsTrigger value="mine">
-            <Wallet className="mr-1.5 h-3.5 w-3.5" /> My Tokens ({myTokens.length})
-          </TabsTrigger>
-          <TabsTrigger value="all">
-            <Users className="mr-1.5 h-3.5 w-3.5" /> All Tokens
-          </TabsTrigger>
+      <Tabs defaultValue="deploy" className="space-y-6">
+        <TabsList className="bg-surface/60 backdrop-blur">
+          <TabsTrigger value="deploy"><Plus className="mr-1.5 h-3.5 w-3.5" /> Deploy</TabsTrigger>
+          <TabsTrigger value="mine"><Wallet className="mr-1.5 h-3.5 w-3.5" /> My Tokens ({myTokens.length})</TabsTrigger>
+          <TabsTrigger value="all"><Users className="mr-1.5 h-3.5 w-3.5" /> All Tokens</TabsTrigger>
         </TabsList>
 
-        {/* Deploy tab */}
-        <TabsContent value="deploy" className="space-y-4">
-          <div className="grid gap-4 lg:grid-cols-3">
-            <form onSubmit={onDeploy} className="panel space-y-4 p-5 lg:col-span-2">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
-                    Token Name
-                  </label>
-                  <input
-                    value={form.name}
-                    onChange={(e) => update("name", e.target.value)}
-                    placeholder="My Awesome Token"
-                    className="h-10 w-full rounded-sm border border-border bg-background px-3 text-sm focus:border-primary focus:outline-none"
-                    disabled={busy}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
-                    Symbol
-                  </label>
-                  <input
-                    value={form.symbol}
-                    onChange={(e) => update("symbol", e.target.value.toUpperCase())}
-                    placeholder="MAT"
-                    maxLength={11}
-                    className="h-10 w-full rounded-sm border border-border bg-background px-3 font-mono text-sm uppercase focus:border-primary focus:outline-none"
-                    disabled={busy}
-                  />
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
-                    Decimals
-                  </label>
-                  <input
-                    value={form.decimals}
-                    onChange={(e) => update("decimals", e.target.value.replace(/\D/g, ""))}
-                    placeholder="18"
-                    className="h-10 w-full rounded-sm border border-border bg-background px-3 font-mono text-sm focus:border-primary focus:outline-none"
-                    disabled={busy}
-                  />
-                  <div className="mt-1 text-[10px] text-muted-foreground">0–18 (standard: 18)</div>
-                </div>
-                <div>
-                  <label className="mb-1.5 block text-xs uppercase tracking-wider text-muted-foreground">
-                    Total Supply
-                  </label>
-                  <input
-                    value={form.totalSupply}
-                    onChange={(e) => update("totalSupply", e.target.value.replace(/\D/g, ""))}
-                    placeholder="1000000"
-                    className="h-10 w-full rounded-sm border border-border bg-background px-3 font-mono text-sm focus:border-primary focus:outline-none"
-                    disabled={busy}
-                  />
-                  <div className="mt-1 text-[10px] text-muted-foreground">
-                    {supplyPreview ? `${supplyPreview} ${form.symbol || "tokens"}` : "Whole units (no decimals)"}
+        {/* DEPLOY tab — wizard */}
+        <TabsContent value="deploy">
+          {/* Stepper */}
+          <div className="mb-6 flex flex-wrap items-center gap-3">
+            <StepDot n={1} label="Token Basics" state={step === 1 ? "active" : "done"} />
+            <div className="h-px w-10 bg-border" />
+            <StepDot n={2} label="Features" state={step === 2 ? "active" : step > 2 ? "done" : "todo"} />
+            <div className="h-px w-10 bg-border" />
+            <StepDot n={3} label="Review & Deploy" state={step === 3 ? "active" : "todo"} />
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-[1fr_360px]">
+            {/* Left: form */}
+            <div className="panel p-6">
+              {step === 1 && (
+                <div className="space-y-5">
+                  <div>
+                    <h2 className="font-display text-2xl">Token Basics</h2>
+                    <p className="text-sm text-muted-foreground">Define the core parameters of your token.</p>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium">
+                      Token Name <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      value={form.name}
+                      onChange={(e) => update("name", e.target.value)}
+                      placeholder="My Awesome Token"
+                      maxLength={50}
+                      className="h-11 w-full rounded-xl border border-border/60 bg-background/60 px-3.5 text-sm focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <div className="mt-1 text-[11px] text-muted-foreground">Max 50 characters — appears in wallets</div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium">
+                      Token Symbol <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      value={form.symbol}
+                      onChange={(e) => update("symbol", e.target.value.toUpperCase())}
+                      placeholder="MAT"
+                      maxLength={11}
+                      className="h-11 w-full rounded-xl border border-border/60 bg-background/60 px-3.5 font-mono text-sm uppercase focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <div className="mt-1 text-[11px] text-muted-foreground">e.g. MAT — appears on DEXes</div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium">
+                      Total Supply <span className="text-destructive">*</span>
+                    </label>
+                    <input
+                      value={form.totalSupply}
+                      onChange={(e) => update("totalSupply", e.target.value.replace(/\D/g, ""))}
+                      placeholder="1000000"
+                      className="h-11 w-full rounded-xl border border-border/60 bg-background/60 px-3.5 font-mono text-sm focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <div className="mt-1 text-[11px] text-muted-foreground">
+                      {supplyPreview ? `${supplyPreview} ${form.symbol || "tokens"}` : "Whole units (no decimals applied)"}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium">Decimals</label>
+                    <input
+                      value={form.decimals}
+                      onChange={(e) => update("decimals", e.target.value.replace(/\D/g, ""))}
+                      placeholder="18 (Standard)"
+                      className="h-11 w-full rounded-xl border border-border/60 bg-background/60 px-3.5 font-mono text-sm focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    />
+                    <div className="mt-1 text-[11px] text-muted-foreground">18 decimals is standard for most tokens</div>
+                  </div>
+
+                  <div className="flex justify-end pt-2">
+                    <button
+                      onClick={() => setStep(2)}
+                      disabled={!step1Valid}
+                      className="btn-primary"
+                    >
+                      Next <ArrowRight className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Feature toggles */}
-              <div>
-                <label className="mb-2 block text-xs uppercase tracking-wider text-muted-foreground">
-                  Features
-                </label>
-                <div className="grid gap-2 md:grid-cols-3">
+              {step === 2 && (
+                <div className="space-y-5">
+                  <div>
+                    <h2 className="font-display text-2xl">Token Features</h2>
+                    <p className="text-sm text-muted-foreground">Configure optional capabilities for your token.</p>
+                  </div>
+
                   {[
-                    { key: "mintable", label: "Mintable", desc: "Owner can mint more" },
-                    { key: "burnable", label: "Burnable", desc: "Holders can burn" },
-                    { key: "pausable", label: "Pausable", desc: "Owner can pause transfers" },
+                    { key: "mintable" as const, label: "Mintable", desc: "Owner can create additional tokens after launch" },
+                    { key: "burnable" as const, label: "Burnable", desc: "Token holders can permanently destroy their tokens" },
+                    { key: "pausable" as const, label: "Pausable", desc: "Owner can pause all token transfers in an emergency" },
                   ].map((f) => (
                     <label
                       key={f.key}
-                      className={`cursor-pointer rounded-sm border px-3 py-2.5 transition-colors ${
-                        form[f.key as keyof FormState]
-                          ? "border-primary bg-primary/10"
-                          : "border-border bg-surface hover:border-primary/40"
+                      className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition-all ${
+                        form[f.key]
+                          ? "border-primary/60 bg-primary/5 shadow-[inset_0_0_24px_-8px_hsl(var(--primary)/0.4)]"
+                          : "border-border/60 bg-background/40 hover:border-primary/30"
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm font-medium">{f.label}</span>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(form[f.key as keyof FormState])}
-                          onChange={(e) => update(f.key as keyof FormState, e.target.checked as never)}
-                          className="h-4 w-4 accent-primary"
-                          disabled={busy}
-                        />
+                      <div>
+                        <div className="text-sm font-semibold text-foreground">{f.label}</div>
+                        <div className="mt-0.5 text-xs text-muted-foreground">{f.desc}</div>
                       </div>
-                      <div className="text-[10px] text-muted-foreground">{f.desc}</div>
+                      <button
+                        type="button"
+                        onClick={() => update(f.key, !form[f.key])}
+                        className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+                          form[f.key] ? "bg-gradient-violet" : "bg-surface border border-border"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            form[f.key] ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
                     </label>
                   ))}
-                </div>
-              </div>
 
-              {/* Status */}
-              {status.kind !== "idle" && (
-                <div
-                  className={`flex items-start gap-2 rounded-sm border px-3 py-2.5 text-sm ${
-                    status.kind === "ok"
-                      ? "border-green-500/40 bg-green-500/10 text-green-400"
-                      : status.kind === "error"
-                      ? "border-fire/40 bg-fire/10 text-fire"
-                      : "border-primary/40 bg-primary/10 text-primary"
-                  }`}
-                >
-                  {status.kind === "ok" ? (
-                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : status.kind === "error" ? (
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                  ) : (
-                    <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
-                  )}
-                  <div className="flex-1 break-words">
-                    <div>{status.msg}</div>
-                    {status.kind === "ok" && status.tokenAddr && (
-                      <div className="mt-1 flex flex-wrap items-center gap-3 text-xs">
-                        <span className="font-mono">{status.tokenAddr}</span>
-                        <button onClick={() => copyText(status.tokenAddr!)} className="hover:text-foreground">
-                          <Copy className="inline h-3 w-3" /> copy
-                        </button>
-                        <a
-                          href={`${TOKEN_FACTORY_EXPLORER}/address/${status.tokenAddr}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="hover:text-foreground"
-                        >
-                          <ExternalLink className="inline h-3 w-3" /> explorer
-                        </a>
-                      </div>
-                    )}
-                    {status.kind === "ok" && status.tx && (
-                      <a
-                        href={`${TOKEN_FACTORY_EXPLORER}/tx/${status.tx}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-flex items-center gap-1 text-xs hover:text-foreground"
-                      >
-                        view tx <ExternalLink className="h-3 w-3" />
-                      </a>
-                    )}
+                  <div className="flex justify-between pt-2">
+                    <button
+                      onClick={() => setStep(1)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium hover:border-primary/40"
+                    >
+                      <ArrowLeft className="h-4 w-4" /> Back
+                    </button>
+                    <button onClick={() => setStep(3)} className="btn-primary">
+                      Next <ArrowRight className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               )}
 
-              {!isConnected ? (
-                <div className="flex justify-center">
-                  <ConnectButton />
-                </div>
-              ) : (
-                <button
-                  type="submit"
-                  disabled={busy}
-                  className="flex h-12 w-full items-center justify-center gap-2 rounded-sm bg-gradient-fire text-base font-medium text-primary-foreground shadow-glow-fire transition-opacity hover:opacity-90 disabled:opacity-50"
-                >
-                  {busy ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" /> Deploying…
-                    </>
-                  ) : (
-                    <>
-                      <Rocket className="h-4 w-4" /> Deploy Token ({deployFee} zkLTC)
-                    </>
-                  )}
-                </button>
-              )}
-            </form>
+              {step === 3 && (
+                <div className="space-y-5">
+                  <div>
+                    <h2 className="font-display text-2xl">Review & Deploy</h2>
+                    <p className="text-sm text-muted-foreground">Confirm your token configuration before deploying.</p>
+                  </div>
 
-            {/* Side info */}
-            <aside className="space-y-4">
-              <div className="panel p-5">
-                <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-wider text-muted-foreground">
-                  <Coins className="h-3.5 w-3.5" /> How it works
+                  <div className="space-y-2 rounded-xl border border-border/60 bg-background/40 p-4 text-sm">
+                    {[
+                      ["Token Name", form.name || "—"],
+                      ["Symbol", form.symbol || "—"],
+                      ["Total Supply", supplyPreview ?? "—"],
+                      ["Decimals", form.decimals || "18"],
+                    ].map(([k, v]) => (
+                      <div key={k} className="flex items-center justify-between border-b border-border/40 py-1.5 last:border-0">
+                        <span className="text-muted-foreground">{k}</span>
+                        <span className="font-mono text-foreground">{v}</span>
+                      </div>
+                    ))}
+                    <div className="flex items-start justify-between pt-1">
+                      <span className="text-muted-foreground">Features</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          { k: "mintable", l: "Mintable" },
+                          { k: "burnable", l: "Burnable" },
+                          { k: "pausable", l: "Pausable" },
+                        ].map((f) => {
+                          const on = form[f.k as keyof FormState] as boolean;
+                          return (
+                            <span
+                              key={f.k}
+                              className={`rounded-full px-2 py-0.5 text-[10px] uppercase tracking-wider ${
+                                on
+                                  ? "border border-green/40 bg-green/10 text-green"
+                                  : "border border-border bg-surface text-muted-foreground/60"
+                              }`}
+                            >
+                              {f.l}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 p-4">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Deployment Fee</div>
+                      <div className="font-display text-xl text-gradient-violet">{deployFee} zkLTC</div>
+                    </div>
+                    <Coins className="h-6 w-6 text-primary" />
+                  </div>
+
+                  <button onClick={onDeploy} disabled={busy} className="btn-primary h-14 w-full text-base">
+                    {busy ? <Loader2 className="h-5 w-5 animate-spin" /> : <Rocket className="h-5 w-5" />}
+                    Deploy Token
+                  </button>
+                  <div className="text-center text-[11px] text-muted-foreground">
+                    A non-refundable deployment fee of {deployFee} zkLTC will be charged on confirmation.
+                  </div>
+
+                  <div className="flex justify-start pt-2">
+                    <button
+                      onClick={() => setStep(2)}
+                      className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2.5 text-sm font-medium hover:border-primary/40"
+                    >
+                      <ArrowLeft className="h-4 w-4" /> Back
+                    </button>
+                  </div>
                 </div>
-                <ol className="space-y-2 text-sm text-foreground/85">
-                  <li>1. Fill token details &amp; pick features.</li>
-                  <li>2. Pay {deployFee} zkLTC deploy fee on LitVM.</li>
-                  <li>3. Factory deploys your ERC-20 instantly.</li>
-                  <li>4. Full supply minted to your wallet.</li>
-                </ol>
-              </div>
-              <div className="panel p-5 text-xs">
-                <div className="mb-2 flex items-center gap-2 uppercase tracking-wider text-muted-foreground">
-                  <AlertTriangle className="h-3.5 w-3.5 text-fire" /> Heads up
-                </div>
-                <p className="text-foreground/75">
-                  Factory is deployed on <span className="text-fire">LitVM testnet</span>, not LitVM.
-                  You'll be prompted to switch networks when deploying.
-                </p>
-              </div>
-            </aside>
+              )}
+            </div>
+
+            {/* Right: live preview */}
+            <LivePreview form={form} />
           </div>
         </TabsContent>
 
-        {/* My tokens */}
-        <TabsContent value="mine" className="space-y-3">
-          {!isConnected ? (
-            <div className="panel flex flex-col items-center gap-3 p-10 text-center">
-              <Wallet className="h-8 w-8 text-muted-foreground" />
-              <div className="text-sm text-muted-foreground">Connect wallet to see your deployed tokens</div>
-              <ConnectButton />
-            </div>
-          ) : myTokens.length === 0 ? (
-            <div className="panel p-10 text-center text-sm text-muted-foreground">
-              You haven't deployed any tokens yet.
-            </div>
+        {/* MY TOKENS tab */}
+        <TabsContent value="mine">
+          {myTokens.length === 0 ? (
+            <EmptyState text={isConnected ? "You haven't deployed any tokens yet." : "Connect wallet to see your tokens."} />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {myTokens.map((t) => (
-                <TokenCard key={t.contractAddress} token={t} owned onAction={tokenAction} />
-              ))}
+            <div className="grid gap-4 md:grid-cols-2">
+              {myTokens.map((t) => <TokenCard key={t.contractAddress} token={t} owned onAction={tokenAction} />)}
             </div>
           )}
         </TabsContent>
 
-        {/* All tokens */}
-        <TabsContent value="all" className="space-y-3">
+        {/* ALL TOKENS tab */}
+        <TabsContent value="all">
           {allTokens.length === 0 ? (
-            <div className="panel p-10 text-center text-sm text-muted-foreground">
-              No tokens deployed yet via this factory.
-            </div>
+            <EmptyState text="No tokens deployed yet via this factory." />
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
-              {allTokens.map((t) => (
-                <TokenCard key={t.contractAddress} token={t} />
-              ))}
+            <div className="grid gap-4 md:grid-cols-2">
+              {allTokens.map((t) => <TokenCard key={t.contractAddress} token={t} />)}
             </div>
           )}
         </TabsContent>
       </Tabs>
+
+      <SubmitModal open={showModal} onClose={() => setShowModal(false)} status={status} />
     </div>
   );
 }
 
+function EmptyState({ text }: { text: string }) {
+  return (
+    <div className="panel p-12 text-center text-sm text-muted-foreground">{text}</div>
+  );
+}
+
 function TokenCard({
-  token,
-  owned,
-  onAction,
-}: {
-  token: TokenInfo;
-  owned?: boolean;
-  onAction?: (addr: string, action: "pause" | "unpause" | "burn" | "mint", arg?: string) => void;
-}) {
-  const [mintAmt, setMintAmt] = useState("");
-  const [burnAmt, setBurnAmt] = useState("");
-  const deployedDate = new Date(Number(token.deployedAt) * 1000).toLocaleDateString();
+  token, owned, onAction,
+}: { token: TokenInfo; owned?: boolean; onAction?: (addr: string, action: "pause" | "unpause" | "burn" | "mint", arg?: string) => void }) {
+  const initial = (token.symbol || "?").charAt(0).toUpperCase();
+  const supply = formatUnits(token.totalSupply, token.decimals);
 
   return (
-    <div className="panel p-4 transition-shadow hover:shadow-glow-cyan">
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <div className="font-display text-xl text-foreground">{token.symbol}</div>
-            <span className="truncate text-xs text-muted-foreground">{token.name}</span>
-          </div>
-          <button
-            onClick={() => copyText(token.contractAddress, "Token address copied")}
-            className="mt-0.5 flex items-center gap-1 font-mono text-xs text-muted-foreground hover:text-primary"
-          >
-            {shortAddr(token.contractAddress)} <Copy className="h-3 w-3" />
-          </button>
+    <div className="panel p-4 transition-all hover:border-primary/40 hover:shadow-glow-violet/30">
+      <div className="flex items-start gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-gradient-violet text-lg font-bold text-primary-foreground shadow-glow-violet">
+          {initial}
         </div>
-        <a
-          href={`${TOKEN_FACTORY_EXPLORER}/address/${token.contractAddress}`}
-          target="_blank"
-          rel="noreferrer"
-          className="text-muted-foreground hover:text-primary"
-        >
-          <ExternalLink className="h-4 w-4" />
-        </a>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <div className="truncate font-display text-lg">{token.name}</div>
+            <span className="rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] text-primary">
+              {token.symbol}
+            </span>
+          </div>
+          <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
+            {shortAddr(token.contractAddress)}
+          </div>
+        </div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => copyText(token.contractAddress, "Address copied")}
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary"
+          >
+            <Copy className="h-3.5 w-3.5" />
+          </button>
+          <a
+            href={`${EXPLORER_URL}/address/${token.contractAddress}`}
+            target="_blank"
+            rel="noreferrer"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 text-xs">
-        <div>
-          <div className="text-muted-foreground">Supply</div>
-          <div className="font-mono text-foreground">{token.totalSupply.toLocaleString()}</div>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
+        <div className="rounded-lg border border-border/40 bg-background/40 p-2">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Supply</div>
+          <div className="font-mono text-foreground">{Number(supply).toLocaleString()}</div>
         </div>
-        <div>
-          <div className="text-muted-foreground">Decimals</div>
+        <div className="rounded-lg border border-border/40 bg-background/40 p-2">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Decimals</div>
           <div className="font-mono text-foreground">{token.decimals}</div>
-        </div>
-        <div>
-          <div className="text-muted-foreground">Creator</div>
-          <div className="font-mono text-foreground">{shortAddr(token.creator)}</div>
-        </div>
-        <div>
-          <div className="text-muted-foreground">Deployed</div>
-          <div className="text-foreground">{deployedDate}</div>
         </div>
       </div>
 
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {token.mintable && <span className="chip text-[10px]">MINTABLE</span>}
-        {token.burnable && <span className="chip text-[10px]">BURNABLE</span>}
-        {token.pausable && <span className="chip text-[10px]">PAUSABLE</span>}
+        {token.mintable && <span className="rounded-full border border-green/40 bg-green/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-green">Mintable</span>}
+        {token.burnable && <span className="rounded-full border border-fire/40 bg-fire/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-fire">Burnable</span>}
+        {token.pausable && <span className="rounded-full border border-gold/40 bg-gold/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-gold">Pausable</span>}
       </div>
 
       {owned && onAction && (
-        <div className="mt-4 space-y-2 border-t border-border pt-3">
+        <div className="mt-4 flex flex-wrap gap-2 border-t border-border/40 pt-3">
           {token.mintable && (
-            <div className="flex gap-2">
-              <input
-                value={mintAmt}
-                onChange={(e) => setMintAmt(e.target.value.replace(/\D/g, ""))}
-                placeholder="Amount"
-                className="h-8 flex-1 rounded-sm border border-border bg-background px-2 font-mono text-xs"
-              />
-              <button
-                onClick={() => mintAmt && onAction(token.contractAddress, "mint", mintAmt)}
-                className="flex items-center gap-1 rounded-sm border border-primary/50 bg-primary/10 px-2.5 text-xs text-primary hover:bg-primary/20"
-              >
-                <Plus className="h-3 w-3" /> Mint
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                const a = prompt("Mint how many tokens?");
+                if (a && /^\d+$/.test(a)) onAction(token.contractAddress, "mint", a);
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-green/40 bg-green/5 px-2.5 py-1 text-[11px] text-green hover:bg-green/10"
+            >
+              <Plus className="h-3 w-3" /> Mint
+            </button>
           )}
           {token.burnable && (
-            <div className="flex gap-2">
-              <input
-                value={burnAmt}
-                onChange={(e) => setBurnAmt(e.target.value.replace(/\D/g, ""))}
-                placeholder="Amount"
-                className="h-8 flex-1 rounded-sm border border-border bg-background px-2 font-mono text-xs"
-              />
-              <button
-                onClick={() => burnAmt && onAction(token.contractAddress, "burn", burnAmt)}
-                className="flex items-center gap-1 rounded-sm border border-fire/50 bg-fire/10 px-2.5 text-xs text-fire hover:bg-fire/20"
-              >
-                <Flame className="h-3 w-3" /> Burn
-              </button>
-            </div>
+            <button
+              onClick={() => {
+                const a = prompt("Burn how many tokens?");
+                if (a && /^\d+$/.test(a)) onAction(token.contractAddress, "burn", a);
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-fire/40 bg-fire/5 px-2.5 py-1 text-[11px] text-fire hover:bg-fire/10"
+            >
+              <Flame className="h-3 w-3" /> Burn
+            </button>
           )}
           {token.pausable && (
-            <div className="flex gap-2">
+            <>
               <button
                 onClick={() => onAction(token.contractAddress, "pause")}
-                className="flex flex-1 items-center justify-center gap-1 rounded-sm border border-border bg-surface px-2 py-1.5 text-xs hover:border-fire/50 hover:text-fire"
+                className="inline-flex items-center gap-1 rounded-lg border border-gold/40 bg-gold/5 px-2.5 py-1 text-[11px] text-gold hover:bg-gold/10"
               >
                 <Pause className="h-3 w-3" /> Pause
               </button>
               <button
                 onClick={() => onAction(token.contractAddress, "unpause")}
-                className="flex flex-1 items-center justify-center gap-1 rounded-sm border border-border bg-surface px-2 py-1.5 text-xs hover:border-primary/50 hover:text-primary"
+                className="inline-flex items-center gap-1 rounded-lg border border-primary/40 bg-primary/5 px-2.5 py-1 text-[11px] text-primary hover:bg-primary/10"
               >
                 <Play className="h-3 w-3" /> Unpause
               </button>
-            </div>
+            </>
           )}
         </div>
       )}
     </div>
   );
 }
-
