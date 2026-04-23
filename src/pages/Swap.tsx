@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, ArrowDownUp, ExternalLink } from "lucide-react";
-import { BrowserProvider, Contract, JsonRpcProvider, formatEther, formatUnits, parseUnits, isAddress, ZeroAddress } from "ethers";
+import { ArrowDownUp, ChevronDown, ExternalLink, RefreshCw, Search, Settings2, Star, X, Zap } from "lucide-react";
+import { BrowserProvider, Contract, JsonRpcProvider, formatEther, formatUnits, parseUnits, isAddress } from "ethers";
 import { useAccount, useSwitchChain } from "wagmi";
 import {
   DEFAULT_ROUTER,
@@ -45,24 +45,181 @@ async function loadTokenMeta(addr: string, owner?: string): Promise<TokenMeta> {
   };
 }
 
-function TokenChips({
-  selected, onSelect,
-}: { selected: string; onSelect: (a: string) => void }) {
+/** Token avatar — first letter on a violet gradient circle */
+function TokenAvatar({ symbol, size = 32 }: { symbol: string; size?: number }) {
+  const initial = (symbol || "?").charAt(0).toUpperCase();
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {SWAP_TOKENS.map((t) => {
-        const active = t.address.toLowerCase() === selected.toLowerCase();
-        return (
+    <div
+      className="flex shrink-0 items-center justify-center rounded-full bg-gradient-violet font-display text-primary-foreground shadow-glow-violet/40"
+      style={{ width: size, height: size, fontSize: size * 0.42 }}
+    >
+      {initial}
+    </div>
+  );
+}
+
+/** Modal for picking a token */
+function TokenPickerModal({
+  open,
+  onClose,
+  onPick,
+  tokenBalances,
+}: {
+  open: boolean;
+  onClose: () => void;
+  onPick: (addr: string) => void;
+  tokenBalances: Record<string, string>;
+}) {
+  const [query, setQuery] = useState("");
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return SWAP_TOKENS;
+    return SWAP_TOKENS.filter(
+      (t) => t.symbol.toLowerCase().includes(q) || t.address.toLowerCase().includes(q),
+    );
+  }, [query]);
+
+  const customAddress = useMemo(() => {
+    const q = query.trim();
+    if (isAddress(q) && !SWAP_TOKENS.some((t) => t.address.toLowerCase() === q.toLowerCase())) {
+      return q;
+    }
+    return null;
+  }, [query]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-background/70 p-4 pt-[10vh] backdrop-blur-md animate-fade-in">
+      <div
+        className="w-full max-w-md panel-elevated p-5 animate-scale-in"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="font-display text-xl text-gradient-violet">Select a Token</h3>
           <button
-            key={t.address}
-            onClick={() => onSelect(t.address)}
-            className={`chip ${active ? "chip-active" : ""}`}
-            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-surface hover:text-foreground"
           >
-            {t.symbol}
+            <X className="h-4 w-4" />
           </button>
-        );
-      })}
+        </div>
+
+        <div className="relative mt-4">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            autoFocus
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search name or paste address"
+            className="h-12 w-full rounded-xl border border-border/60 bg-background/60 pl-11 pr-4 text-sm placeholder:text-muted-foreground/70 focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/20"
+          />
+        </div>
+
+        <div className="mt-4 max-h-[50vh] space-y-1 overflow-y-auto pr-1">
+          {customAddress && (
+            <button
+              onClick={() => onPick(customAddress)}
+              className="flex w-full items-center justify-between rounded-xl border border-primary/40 bg-primary/5 px-3 py-3 text-left transition-colors hover:bg-primary/10"
+            >
+              <div className="flex items-center gap-3">
+                <TokenAvatar symbol="?" />
+                <div>
+                  <div className="text-sm font-semibold">Import token</div>
+                  <div className="font-mono text-[11px] text-muted-foreground">{shortAddr(customAddress)}</div>
+                </div>
+              </div>
+              <span className="text-[10px] uppercase tracking-wider text-primary">Custom</span>
+            </button>
+          )}
+
+          {filtered.map((t) => {
+            const bal = tokenBalances[t.address] ?? "—";
+            return (
+              <button
+                key={t.address}
+                onClick={() => onPick(t.address)}
+                className="group flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-primary/10"
+              >
+                <div className="flex items-center gap-3">
+                  <TokenAvatar symbol={t.symbol} />
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-sm font-semibold text-foreground">{t.symbol}</span>
+                      {!isNativeAddr(t.address) && (
+                        <a
+                          href={`${EXPLORER_URL}/token/${t.address}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-muted-foreground hover:text-primary"
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{t.symbol}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-mono">{(+bal).toLocaleString(undefined, { maximumFractionDigits: 4 })}</span>
+                  <Star className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-gold/60" />
+                </div>
+              </button>
+            );
+          })}
+
+          {filtered.length === 0 && !customAddress && (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              No tokens found. Paste a contract address to import.
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Settings popover for slippage */
+function SettingsPopover({
+  open,
+  onClose,
+  slippage,
+  onSlippage,
+}: {
+  open: boolean;
+  onClose: () => void;
+  slippage: number;
+  onSlippage: (s: number) => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="absolute right-0 top-12 z-30 w-72 panel-elevated p-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between">
+        <div className="text-sm font-semibold">Transaction Settings</div>
+        <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="mt-3">
+        <div className="text-xs text-muted-foreground">Slippage tolerance</div>
+        <div className="mt-2 flex gap-2">
+          {[0.1, 0.5, 1].map((v) => (
+            <button
+              key={v}
+              onClick={() => onSlippage(v)}
+              className={`flex-1 rounded-lg border px-3 py-2 text-xs font-medium transition-colors ${
+                slippage === v
+                  ? "border-primary bg-primary/15 text-primary"
+                  : "border-border bg-surface hover:border-primary/40"
+              }`}
+            >
+              {v}%
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
@@ -71,7 +228,7 @@ export default function Swap() {
   const { address: walletAddr, isConnected, chainId } = useAccount();
   const { switchChainAsync } = useSwitchChain();
 
-  const [routerAddr, setRouterAddr] = useState(DEFAULT_ROUTER);
+  const [routerAddr] = useState(DEFAULT_ROUTER);
   const [wethAddr, setWethAddr] = useState<string>("");
   const [tokenInAddr, setTokenInAddr] = useState<string>(NATIVE_SENTINEL);
   const [tokenOutAddr, setTokenOutAddr] = useState<string>(POPULAR_TOKENS[0].address);
@@ -84,9 +241,12 @@ export default function Swap() {
   const [busy, setBusy] = useState(false);
   const [quoteLoading, setQuoteLoading] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: "idle", msg: "" });
-  const [advanced, setAdvanced] = useState(false);
+  const [pickerSide, setPickerSide] = useState<"in" | "out" | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [tokenBalances, setTokenBalances] = useState<Record<string, string>>({});
   const quoteTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Load WETH from router
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -101,6 +261,7 @@ export default function Swap() {
     return () => { cancel = true; };
   }, [routerAddr]);
 
+  // Load token in / out metas
   useEffect(() => {
     let cancel = false;
     (async () => {
@@ -122,6 +283,25 @@ export default function Swap() {
     })();
     return () => { cancel = true; };
   }, [tokenOutAddr, walletAddr]);
+
+  // Load all SWAP_TOKENS balances for the picker (lazy / fire-and-forget)
+  useEffect(() => {
+    let cancel = false;
+    if (!walletAddr) { setTokenBalances({}); return; }
+    (async () => {
+      const out: Record<string, string> = {};
+      await Promise.all(
+        SWAP_TOKENS.map(async (t) => {
+          try {
+            const m = await loadTokenMeta(t.address, walletAddr);
+            out[t.address] = m.balance;
+          } catch { out[t.address] = "0"; }
+        })
+      );
+      if (!cancel) setTokenBalances(out);
+    })();
+    return () => { cancel = true; };
+  }, [walletAddr]);
 
   const reloadAllowance = useCallback(async () => {
     if (!walletAddr || isNativeAddr(tokenInAddr)) { setAllowance(0n); return; }
@@ -194,7 +374,7 @@ export default function Swap() {
   const onApprove = async () => {
     if (!tokenIn || isNativeAddr(tokenInAddr) || !window.ethereum) return;
     setBusy(true);
-    setStatus({ kind: "info", msg: "⏳ Approving token…" });
+    setStatus({ kind: "info", msg: "Approving token…" });
     try {
       await ensureChain();
       const provider = new BrowserProvider(window.ethereum as never);
@@ -202,9 +382,9 @@ export default function Swap() {
       const c = new Contract(tokenInAddr, ERC20_ABI, signer);
       const inWei = parseUnits(amountIn || "0", tokenIn.decimals);
       const tx = await c.approve(routerAddr, inWei);
-      setStatus({ kind: "info", msg: "⏳ Waiting for approval confirmation…" });
+      setStatus({ kind: "info", msg: "Waiting for approval confirmation…" });
       await tx.wait();
-      setStatus({ kind: "ok", msg: "✅ Approved! Now click Swap." });
+      setStatus({ kind: "ok", msg: "Approved! Now click Swap." });
       await reloadAllowance();
     } catch (e) {
       setStatus({ kind: "error", msg: "Approval failed: " + errMsg(e).slice(0, 140) });
@@ -220,7 +400,7 @@ export default function Swap() {
     const path = [inA, outA];
 
     setBusy(true);
-    setStatus({ kind: "info", msg: "⏳ Sending swap transaction…" });
+    setStatus({ kind: "info", msg: "Sending swap transaction…" });
     try {
       await ensureChain();
       const provider = new BrowserProvider(window.ethereum as never);
@@ -240,11 +420,11 @@ export default function Swap() {
         tx = await router.swapExactTokensForTokens(inWei, minOut, path, walletAddr, deadline);
       }
 
-      setStatus({ kind: "info", msg: "⏳ Confirming… " + tx.hash.slice(0, 12) + "…" });
+      setStatus({ kind: "info", msg: "Confirming… " + tx.hash.slice(0, 12) + "…" });
       const receipt = await tx.wait();
       setStatus({
         kind: "ok",
-        msg: `✅ Swap confirmed! tx ${shortAddr(receipt?.hash ?? tx.hash)}`,
+        msg: `Swap confirmed! tx ${shortAddr(receipt?.hash ?? tx.hash)}`,
       });
       setAmountIn(""); setAmountOut("");
       const [m1, m2] = await Promise.all([
@@ -261,216 +441,245 @@ export default function Swap() {
   };
 
   const priceStr = useMemo(() => {
-    if (!amountIn || !amountOut || +amountIn === 0 || !tokenIn || !tokenOut) return "—";
+    if (!amountIn || !amountOut || +amountIn === 0 || !tokenIn || !tokenOut) return null;
     const r = +amountOut / +amountIn;
     return `1 ${tokenIn.symbol} = ${r.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${tokenOut.symbol}`;
   }, [amountIn, amountOut, tokenIn, tokenOut]);
 
   const minRecv = useMemo(() => {
-    if (!amountOut || !tokenOut) return "—";
+    if (!amountOut || !tokenOut) return null;
     const v = +amountOut * (1 - slippage / 100);
     return `${v.toLocaleString(undefined, { maximumFractionDigits: 6 })} ${tokenOut.symbol}`;
   }, [amountOut, slippage, tokenOut]);
 
-  const routeStr = tokenIn && tokenOut ? `${tokenIn.symbol} → ${tokenOut.symbol}` : "—";
-
-  const lastTxHash = status.kind === "ok" && status.msg.includes("tx ") ? status.msg.split("tx ")[1] : null;
-
+  // Action button
   let action: React.ReactNode = null;
   if (!isConnected) {
-    action = <div className="rounded-sm border border-border bg-surface p-4 text-center text-sm text-muted-foreground">Connect wallet to swap</div>;
+    action = (
+      <button disabled className="h-14 w-full rounded-xl border border-border/60 bg-surface/60 text-sm font-medium text-muted-foreground">
+        Connect wallet to swap
+      </button>
+    );
   } else if (!tokenIn || !tokenOut) {
-    action = <button disabled className="h-12 w-full rounded-sm border border-border bg-surface text-sm text-muted-foreground">Loading tokens…</button>;
+    action = (
+      <button disabled className="h-14 w-full rounded-xl border border-border/60 bg-surface/60 text-sm font-medium text-muted-foreground">
+        Loading tokens…
+      </button>
+    );
   } else if (!amountIn || +amountIn <= 0) {
-    action = <button disabled className="h-12 w-full rounded-sm border border-border bg-surface text-sm text-muted-foreground">Enter amount</button>;
+    action = (
+      <button disabled className="h-14 w-full rounded-xl border border-border/60 bg-surface/60 text-sm font-medium text-muted-foreground">
+        Enter an amount
+      </button>
+    );
   } else if (+amountIn > +tokenIn.balance) {
-    action = <button disabled className="h-12 w-full rounded-sm border border-destructive/40 bg-destructive/10 text-sm text-destructive">Insufficient {tokenIn.symbol} balance</button>;
+    action = (
+      <button disabled className="h-14 w-full rounded-xl border border-destructive/40 bg-destructive/10 text-sm font-medium text-destructive">
+        Insufficient {tokenIn.symbol} balance
+      </button>
+    );
   } else if (quoteLoading) {
-    action = <button disabled className="h-12 w-full rounded-sm border border-border bg-surface text-sm text-muted-foreground">Fetching quote…</button>;
+    action = (
+      <button disabled className="h-14 w-full rounded-xl border border-border/60 bg-surface/60 text-sm font-medium text-muted-foreground">
+        <RefreshCw className="mr-2 inline h-4 w-4 animate-spin" /> Fetching best quote…
+      </button>
+    );
   } else if (!amountOut) {
-    action = <button disabled className="h-12 w-full rounded-sm border border-border bg-surface text-sm text-muted-foreground">No quote available</button>;
+    action = (
+      <button disabled className="h-14 w-full rounded-xl border border-border/60 bg-surface/60 text-sm font-medium text-muted-foreground">
+        No quote available
+      </button>
+    );
   } else {
     const needsApprove = !isNativeAddr(tokenInAddr) && (() => {
       try { return parseUnits(amountIn, tokenIn.decimals) > allowance; } catch { return false; }
     })();
     if (needsApprove) {
       action = (
-        <button onClick={onApprove} disabled={busy} className="h-12 w-full rounded-sm bg-gradient-fire text-base font-semibold uppercase tracking-widest text-fire-foreground transition-opacity hover:opacity-90 disabled:opacity-60">
+        <button onClick={onApprove} disabled={busy} className="btn-primary h-14 w-full text-base">
           {busy ? "Working…" : `Approve ${tokenIn.symbol}`}
         </button>
       );
     } else {
       action = (
-        <button onClick={onSwap} disabled={busy} className="h-12 w-full rounded-sm bg-gradient-cyan text-base font-semibold uppercase tracking-widest text-primary-foreground shadow-glow-cyan transition-opacity hover:opacity-90 disabled:opacity-60">
-          {busy ? "Working…" : `Swap ${tokenIn.symbol} → ${tokenOut.symbol}`}
+        <button onClick={onSwap} disabled={busy} className="btn-primary h-14 w-full text-base">
+          {busy ? "Swapping…" : `Swap ${tokenIn.symbol} → ${tokenOut.symbol}`}
         </button>
       );
     }
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="flex items-center gap-3 font-display text-4xl">
-          <ArrowLeftRight className="h-7 w-7 text-primary" /> Swap
+    <div className="space-y-8">
+      {/* Hero */}
+      <div className="text-center">
+        <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 text-xs uppercase tracking-[0.25em] text-primary">
+          <Zap className="h-3 w-3" /> Best price routing
+        </div>
+        <h1 className="mt-4 font-display text-5xl md:text-6xl">
+          <span className="text-gradient-aurora">LitVM</span>
+          <span className="text-foreground">Swap</span>
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Swap zkLTC and any LitVM ERC-20 directly from your wallet. Pick a token below or paste any contract address.
+        <p className="mx-auto mt-3 max-w-md text-sm text-muted-foreground">
+          Trade any LitVM token instantly · zkLTC native · low fees · instant settlement
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-3">
-          <div className="panel p-4">
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-              <span>You pay</span>
-              {tokenIn && <span>Balance: {(+tokenIn.balance).toFixed(4)} {tokenIn.symbol}</span>}
-            </div>
-            <div className="mt-2 flex items-center gap-2">
-              <input
-                value={amountIn}
-                onChange={(e) => setAmountIn(e.target.value)}
-                placeholder="0.0"
-                inputMode="decimal"
-                className="w-full bg-transparent font-display text-3xl text-foreground placeholder:text-muted-foreground focus:outline-none"
+      {/* Swap card */}
+      <div className="mx-auto max-w-lg">
+        <div className="panel-elevated relative p-5 md:p-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <h2 className="font-display text-xl text-gradient-violet">Swap Your Assets</h2>
+            <div className="relative flex items-center gap-2">
+              <button
+                onClick={() => fetchQuote()}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-surface/60 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                title="Refresh quote"
+              >
+                <RefreshCw className={`h-4 w-4 ${quoteLoading ? "animate-spin" : ""}`} />
+              </button>
+              <button
+                onClick={() => setSettingsOpen((v) => !v)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/60 bg-surface/60 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                title="Settings"
+              >
+                <Settings2 className="h-4 w-4" />
+              </button>
+              <SettingsPopover
+                open={settingsOpen}
+                onClose={() => setSettingsOpen(false)}
+                slippage={slippage}
+                onSlippage={(s) => { setSlippage(s); setSettingsOpen(false); }}
               />
-              <button onClick={onMax} className="chip chip-active text-[11px]">MAX</button>
             </div>
-            <div className="mt-3"><TokenChips selected={tokenInAddr} onSelect={setTokenInAddr} /></div>
-            <input
-              type="text"
-              value={isNativeAddr(tokenInAddr) ? "" : tokenInAddr}
-              onChange={(e) => {
-                const v = e.target.value.trim();
-                if (v === "") setTokenInAddr(NATIVE_SENTINEL);
-                else if (isAddress(v)) setTokenInAddr(v);
-                else setTokenInAddr(v);
-              }}
-              placeholder="or paste any 0x… token address"
-              className="mt-3 h-9 w-full rounded-sm border border-border bg-surface px-3 font-mono text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-            />
           </div>
 
-          <div className="flex justify-center">
-            <button onClick={onFlip} className="flex h-10 w-10 items-center justify-center rounded-sm border border-border bg-surface text-primary transition-colors hover:border-primary hover:bg-primary/10">
+          {/* You pay */}
+          <div className="mt-5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-foreground">You pay</span>
+              {tokenIn && (
+                <button onClick={onMax} className="text-muted-foreground hover:text-primary">
+                  Balance: {(+tokenIn.balance).toFixed(4)} {tokenIn.symbol}
+                </button>
+              )}
+            </div>
+            <div className="mt-2 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/60 p-3 transition-colors focus-within:border-primary/50">
+              <button
+                onClick={() => setPickerSide("in")}
+                className="flex shrink-0 items-center gap-2 rounded-xl border border-border/40 bg-surface/80 px-3 py-2 transition-colors hover:border-primary/40"
+              >
+                <TokenAvatar symbol={tokenIn?.symbol || "?"} size={28} />
+                <span className="font-display text-base text-primary">{tokenIn?.symbol || "Select"}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </button>
+              <input
+                value={amountIn}
+                onChange={(e) => setAmountIn(e.target.value.replace(/[^0-9.]/g, ""))}
+                placeholder="0.0"
+                inputMode="decimal"
+                className="w-full bg-transparent text-right font-display text-3xl text-foreground placeholder:text-muted-foreground/40 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Flip */}
+          <div className="my-2 flex justify-center">
+            <button
+              onClick={onFlip}
+              className="group flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-surface/80 text-primary backdrop-blur transition-all hover:border-primary hover:bg-primary/10 hover:rotate-180"
+            >
               <ArrowDownUp className="h-4 w-4" />
             </button>
           </div>
 
-          <div className="panel p-4">
-            <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.2em] text-muted-foreground">
-              <span>You receive</span>
-              {tokenOut && <span>Balance: {(+tokenOut.balance).toFixed(4)} {tokenOut.symbol}</span>}
-            </div>
-            <div className="mt-2 font-display text-3xl text-foreground">
-              {quoteLoading ? "…" : amountOut ? (+amountOut).toLocaleString(undefined, { maximumFractionDigits: 8 }) : "0.0"}
-            </div>
-            <div className="mt-3"><TokenChips selected={tokenOutAddr} onSelect={setTokenOutAddr} /></div>
-            <input
-              type="text"
-              value={isNativeAddr(tokenOutAddr) ? "" : tokenOutAddr}
-              onChange={(e) => {
-                const v = e.target.value.trim();
-                if (v === "") setTokenOutAddr(NATIVE_SENTINEL);
-                else setTokenOutAddr(v);
-              }}
-              placeholder="or paste any 0x… token address"
-              className="mt-3 h-9 w-full rounded-sm border border-border bg-surface px-3 font-mono text-xs placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-            />
-            {tokenOut && !isNativeAddr(tokenOut.address) && (
-              <div className="mt-2 text-[11px] text-muted-foreground">
-                {tokenOut.symbol} · {tokenOut.decimals} dec · {shortAddr(tokenOut.address)}
-              </div>
-            )}
-          </div>
-
-          <div className="panel flex items-center justify-between p-3">
-            <div className="text-xs text-muted-foreground">Slippage tolerance</div>
-            <div className="flex gap-1">
-              {[0.1, 0.5, 1].map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setSlippage(v)}
-                  className={`chip text-[11px] ${slippage === v ? "chip-active" : ""}`}
-                >
-                  {v}%
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button onClick={() => setAdvanced((v) => !v)} className="text-xs text-muted-foreground hover:text-primary">
-            {advanced ? "− Hide advanced" : "+ Advanced (router override)"}
-          </button>
-          {advanced && (
-            <div className="panel space-y-2 p-3">
-              <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Router contract</div>
-              <input
-                value={routerAddr}
-                onChange={(e) => setRouterAddr(e.target.value.trim())}
-                className="h-9 w-full rounded-sm border border-border bg-surface px-3 font-mono text-xs focus:border-primary focus:outline-none"
-              />
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                <span>WETH: {wethAddr ? shortAddr(wethAddr) : "—"}</span>
-                <button onClick={() => setRouterAddr(DEFAULT_ROUTER)} className="text-fire hover:underline">
-                  Reset to Onmifun
-                </button>
-              </div>
-            </div>
-          )}
-
-          {status.msg && (
-            <div className={`rounded-sm border p-3 text-sm ${
-              status.kind === "ok" ? "border-green/40 bg-green/10 text-green" :
-              status.kind === "error" ? "border-destructive/40 bg-destructive/10 text-destructive" :
-              "border-primary/40 bg-primary/10 text-primary"
-            }`}>
-              {status.msg}
-              {lastTxHash && (
-                <a href={`${EXPLORER_URL}/tx/${lastTxHash}`} target="_blank" rel="noreferrer" className="ml-2 inline-flex items-center gap-1 underline">
-                  View <ExternalLink className="h-3 w-3" />
-                </a>
+          {/* You receive */}
+          <div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-medium text-foreground">You receive</span>
+              {tokenOut && (
+                <span className="text-muted-foreground">
+                  Balance: {(+tokenOut.balance).toFixed(4)} {tokenOut.symbol}
+                </span>
               )}
             </div>
+            <div className="mt-2 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/60 p-3">
+              <button
+                onClick={() => setPickerSide("out")}
+                className="flex shrink-0 items-center gap-2 rounded-xl border border-border/40 bg-surface/80 px-3 py-2 transition-colors hover:border-primary/40"
+              >
+                <TokenAvatar symbol={tokenOut?.symbol || "?"} size={28} />
+                <span className="font-display text-base text-primary">{tokenOut?.symbol || "Select"}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              </button>
+              <div className="w-full text-right font-display text-3xl text-foreground">
+                {quoteLoading ? "…" : amountOut ? (+amountOut).toLocaleString(undefined, { maximumFractionDigits: 6 }) : <span className="text-muted-foreground/40">0.0</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* Quote details */}
+          {(priceStr || minRecv) && (
+            <div className="mt-4 space-y-1.5 rounded-xl border border-border/40 bg-background/40 p-3 text-xs">
+              {priceStr && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Rate</span>
+                  <span className="font-mono text-foreground">{priceStr}</span>
+                </div>
+              )}
+              {minRecv && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Min received ({slippage}%)</span>
+                  <span className="font-mono text-foreground">{minRecv}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Network</span>
+                <span className="font-mono text-foreground">LitVM LiteForge</span>
+              </div>
+            </div>
           )}
 
-          {action}
+          {/* Status */}
+          {status.kind !== "idle" && status.msg && (
+            <div
+              className={`mt-4 rounded-xl border px-3 py-2.5 text-xs ${
+                status.kind === "error"
+                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                  : status.kind === "ok"
+                  ? "border-green/40 bg-green/10 text-green"
+                  : "border-primary/30 bg-primary/10 text-primary"
+              }`}
+            >
+              {status.msg}
+            </div>
+          )}
+
+          {/* Action button */}
+          <div className="mt-5">{action}</div>
         </div>
 
-        <div className="space-y-4">
-          <div className="panel p-4">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-primary">How it works</div>
-            <ol className="mt-3 list-decimal space-y-2 pl-4 text-xs text-muted-foreground">
-              <li>Default router is <span className="text-fire">Onmifun V2</span> — already wired up.</li>
-              <li>Pick a token chip or paste any LitVM ERC-20 address.</li>
-              <li>Live quote pulled from router's <span className="text-primary">getAmountsOut</span>.</li>
-              <li>Approve once for ERC-20 inputs, then swap.</li>
-              <li>Swap fails if no liquidity pool exists for the pair.</li>
-            </ol>
-          </div>
-
-          <div className="panel p-4">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-primary">Quote details</div>
-            <div className="mt-3 space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Price</span><span className="text-foreground">{priceStr}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Min received</span><span className="text-foreground">{minRecv}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Slippage</span><span className="text-foreground">{slippage}%</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Route</span><span className="text-foreground">{routeStr}</span></div>
-            </div>
-          </div>
-
-          <div className="panel p-4">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-primary">Wallet</div>
-            <div className="mt-3 space-y-2 text-xs">
-              <div className="flex justify-between"><span className="text-muted-foreground">Address</span><span className="font-mono text-foreground">{walletAddr ? shortAddr(walletAddr) : "—"}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{tokenIn?.symbol ?? "In"} bal</span><span className="text-foreground">{tokenIn ? (+tokenIn.balance).toFixed(4) : "—"}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">{tokenOut?.symbol ?? "Out"} bal</span><span className="text-foreground">{tokenOut ? (+tokenOut.balance).toFixed(4) : "—"}</span></div>
-            </div>
-          </div>
+        <div className="mt-3 text-center text-[11px] text-muted-foreground">
+          Routed via{" "}
+          <a href={`${EXPLORER_URL}/address/${routerAddr}`} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+            {shortAddr(routerAddr)}
+          </a>{" "}
+          · OmniFun V2 Router
         </div>
       </div>
+
+      {/* Token picker modal */}
+      <TokenPickerModal
+        open={pickerSide !== null}
+        onClose={() => setPickerSide(null)}
+        onPick={(addr) => {
+          if (pickerSide === "in") setTokenInAddr(addr);
+          else if (pickerSide === "out") setTokenOutAddr(addr);
+          setPickerSide(null);
+        }}
+        tokenBalances={tokenBalances}
+      />
     </div>
   );
 }
-
-void ZeroAddress;
