@@ -1,6 +1,6 @@
 import { defineChain } from "viem";
 
-export const RPC_URL = "https://api.republicstats.xyz/litvm/rpc";
+export const RPC_URL = "https://liteforge.rpc.caldera.xyz/http";
 export const EXPLORER_URL = "https://liteforge.explorer.caldera.xyz";
 export const LITVM_CHAIN_ID = 4441;
 
@@ -18,18 +18,44 @@ export const litvmChain = defineChain({
   testnet: true,
 });
 
-// ── Router & token addresses (from working HTML) ─────────────────────────────
+// ── Router & token addresses (own deployed AMM) ──────────────────────────────
 export const NATIVE_SENTINEL = "NATIVE";
-export const DEFAULT_ROUTER = "0xe351c47c3b96844F46e9808a7D5bBa8101BfFB57";
-export const WZKLTC_ADDR = "0x60A84eBC3483fEFB251B76Aea5B8458026Ef4bea";
+export const DEFAULT_FACTORY = "0xb923f1481384386D447C51051907F8CadAFF5f3E";
+export const DEFAULT_ROUTER  = "0xFa1f665C6ee5167f78454d85bc56D263D5da4576";
+export const WZKLTC_ADDR     = "0x60A84eBC3483fEFB251B76Aea5B8458026Ef4bea";
 
+// Router uses the *ZKLTC naming* (not WETH/ETH)
 export const ROUTER_ABI = [
-  "function WETH() view returns (address)",
+  "function WZKLTC() view returns (address)",
   "function factory() view returns (address)",
   "function getAmountsOut(uint amountIn, address[] path) view returns (uint[] amounts)",
+
+  // Swaps
   "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)",
-  "function swapExactETHForTokens(uint amountOutMin, address[] path, address to, uint deadline) payable returns (uint[] amounts)",
-  "function swapExactTokensForETH(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)",
+  "function swapExactZKLTCForTokens(uint amountOutMin, address[] path, address to, uint deadline) payable returns (uint[] amounts)",
+  "function swapExactTokensForZKLTC(uint amountIn, uint amountOutMin, address[] path, address to, uint deadline) returns (uint[] amounts)",
+
+  // Liquidity
+  "function addLiquidity(address tokenA, address tokenB, uint amountADesired, uint amountBDesired, uint amountAMin, uint amountBMin, address to, uint deadline) returns (uint amountA, uint amountB, uint liquidity)",
+  "function addLiquidityZKLTC(address token, uint amountTokenDesired, uint amountTokenMin, uint amountZKLTCMin, address to, uint deadline) payable returns (uint amountToken, uint amountZKLTC, uint liquidity)",
+  "function removeLiquidity(address tokenA, address tokenB, uint liquidity, uint amountAMin, uint amountBMin, address to, uint deadline) returns (uint amountA, uint amountB)",
+  "function removeLiquidityZKLTC(address token, uint liquidity, uint amountTokenMin, uint amountZKLTCMin, address to, uint deadline) returns (uint amountToken, uint amountZKLTC)",
+] as const;
+
+export const FACTORY_ABI = [
+  "function getPair(address tokenA, address tokenB) view returns (address pair)",
+  "function allPairsLength() view returns (uint)",
+] as const;
+
+export const PAIR_ABI = [
+  "function token0() view returns (address)",
+  "function token1() view returns (address)",
+  "function getReserves() view returns (uint112 reserve0, uint112 reserve1, uint32 blockTimestampLast)",
+  "function totalSupply() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function approve(address spender, uint256 amount) returns (bool)",
+  "function allowance(address owner, address spender) view returns (uint256)",
 ] as const;
 
 export const ERC20_ABI = [
@@ -98,3 +124,5 @@ export function errMsg(e: unknown): string {
   const anyE = e as { shortMessage?: string; reason?: string; message?: string };
   return anyE?.shortMessage ?? anyE?.reason ?? anyE?.message ?? String(e).slice(0, 200);
 }
+
+export const SWAP_DEADLINE_SEC = 1200; // 20 min, per spec

@@ -10,6 +10,7 @@ import Transactions from "./pages/Transactions";
 import Network from "./pages/Network";
 import Uptime from "./pages/Uptime";
 import Swap from "./pages/Swap";
+import Pool from "./pages/Pool";
 import Terminal from "./pages/Terminal";
 import Ecosystem from "./pages/Ecosystem";
 import Parameters from "./pages/Parameters";
@@ -31,6 +32,7 @@ const App = () => (
           <Route path="/network" element={<Network />} />
           <Route path="/uptime" element={<Uptime />} />
           <Route path="/swap" element={<Swap />} />
+          <Route path="/pool" element={<Pool />} />
           <Route path="/terminal" element={<Terminal />} />
           <Route path="/ecosystem" element={<Ecosystem />} />
           <Route path="/parameters" element={<Parameters />} />

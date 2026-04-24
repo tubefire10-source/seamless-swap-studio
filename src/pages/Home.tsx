@@ -1,31 +1,27 @@
 import { Link } from "react-router-dom";
-import { Activity, Boxes, ArrowLeftRight, Zap, Database, ChevronRight, Rocket, Sparkles, TrendingUp } from "lucide-react";
+import { Activity, Boxes, ArrowLeftRight, Zap, ChevronRight, Rocket, Sparkles, TrendingUp, Droplets, ArrowUpRight } from "lucide-react";
 import { useLitvmNetwork } from "@/hooks/useLitvmNetwork";
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Area, AreaChart } from "recharts";
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Area, AreaChart, CartesianGrid } from "recharts";
 
-function StatCard({
-  label, value, hint, accent = "primary", icon: Icon,
-}: { label: string; value: string; hint?: string; accent?: "primary" | "fire" | "green" | "gold" | "secondary"; icon: React.ElementType }) {
-  const accentMap = {
-    primary: "text-primary border-primary/30 from-primary/10",
-    secondary: "text-secondary border-secondary/30 from-secondary/10",
-    fire: "text-fire border-fire/30 from-fire/10",
-    green: "text-green border-green/30 from-green/10",
-    gold: "text-gold border-gold/30 from-gold/10",
-  } as const;
+function MetricRow({ label, value, accent }: { label: string; value: string; accent?: "primary" | "muted" }) {
   return (
-    <div className={`panel relative overflow-hidden p-5`}>
-      <div className={`absolute -right-6 -top-6 h-24 w-24 rounded-full bg-gradient-to-br ${accentMap[accent]} to-transparent opacity-50 blur-2xl`} />
-      <div className="relative flex items-start justify-between">
-        <div>
-          <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
-          <div className={`mt-3 font-display text-3xl ${accentMap[accent].split(" ")[0]}`}>{value}</div>
-        </div>
-        <div className={`flex h-10 w-10 items-center justify-center rounded-xl border ${accentMap[accent].split(" ")[1]}`}>
-          <Icon className="h-5 w-5" />
-        </div>
+    <div className="flex items-center justify-between border-b border-border/60 py-3 last:border-0">
+      <span className="text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className={`num text-sm font-semibold ${accent === "primary" ? "text-primary" : "text-foreground"}`}>{value}</span>
+    </div>
+  );
+}
+
+function StatPill({ label, value, accent = "primary", icon: Icon }: { label: string; value: string; accent?: "primary" | "muted"; icon: React.ElementType }) {
+  return (
+    <div className="panel flex items-center gap-3 p-4">
+      <div className={`flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-surface ${accent === "primary" ? "text-primary" : "text-muted-foreground"}`}>
+        <Icon className="h-4 w-4" />
       </div>
-      {hint && <div className="relative mt-3 text-xs text-muted-foreground">{hint}</div>}
+      <div className="min-w-0">
+        <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-muted-foreground">{label}</div>
+        <div className={`num mt-0.5 truncate text-lg font-semibold ${accent === "primary" ? "text-primary" : "text-foreground"}`}>{value}</div>
+      </div>
     </div>
   );
 }
@@ -34,145 +30,178 @@ export default function Home() {
   const { latestBlock, avgBlockTime, gasPriceGwei, recentTxs, blocks } = useLitvmNetwork();
 
   const fmtNum = (n: number | null) => (n == null ? "—" : n.toLocaleString());
-  const totalEst = latestBlock ? Math.round((latestBlock * 2.5)).toLocaleString() : "—";
+  const totalEst = latestBlock ? Math.round(latestBlock * 2.5).toLocaleString() : "—";
+
+  const tooltipStyle = {
+    background: "hsl(var(--card))",
+    border: "1px solid hsl(var(--border))",
+    borderRadius: 12,
+    color: "hsl(var(--foreground))",
+    fontSize: 12,
+    fontFamily: "JetBrains Mono, monospace",
+  };
 
   return (
-    <div className="space-y-10">
-      {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
+    <div className="space-y-6">
+      {/* Hero (compact) */}
+      <section className="panel-elevated relative overflow-hidden p-6">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 text-xs uppercase tracking-[0.25em] text-primary">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-primary">
               <Sparkles className="h-3 w-3" /> LitVM LiteForge · Live
             </div>
-            <h1 className="mt-4 font-display text-5xl leading-tight md:text-6xl">
+            <h1 className="mt-3 font-display text-3xl leading-tight md:text-4xl">
               Welcome to <span className="text-gradient-aurora">LitVM</span>
             </h1>
-            <p className="mt-3 max-w-xl text-sm text-muted-foreground md:text-base">
-              The complete on-chain terminal for LiteForge — trade, deploy, and analyze
-              the fastest zkLTC-native ecosystem.
+            <p className="mt-2 max-w-xl text-sm text-muted-foreground">
+              The complete on-chain terminal for LiteForge — trade, pool, and deploy on the fastest zkLTC-native ecosystem.
             </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link to="/swap" className="btn-primary">
-                <ArrowLeftRight className="h-4 w-4" /> Open Swap
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Link to="/swap" className="btn-primary px-4 py-2 text-sm">
+                <ArrowLeftRight className="h-4 w-4" /> Swap
               </Link>
-              <Link
-                to="/deploy"
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface/60 px-5 py-3 text-sm font-medium backdrop-blur transition-colors hover:border-primary/50 hover:text-primary"
-              >
-                <Rocket className="h-4 w-4" /> Deploy Token
+              <Link to="/pool" className="btn-secondary px-4 py-2 text-sm">
+                <Droplets className="h-4 w-4" /> Pool
+              </Link>
+              <Link to="/deploy" className="btn-secondary px-4 py-2 text-sm">
+                <Rocket className="h-4 w-4" /> Deploy
               </Link>
             </div>
           </div>
-
-          <div className="flex items-center gap-2 self-start rounded-xl border border-green/40 bg-green/10 px-4 py-2 text-xs text-green">
+          <div className="flex items-center gap-2 self-start rounded-lg border border-primary/40 bg-primary/10 px-3 py-1.5 text-xs text-primary">
             <span className="status-dot" /> Network Live
           </div>
         </div>
       </section>
 
-      {/* Network meta */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className="panel p-4">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Network</div>
-          <div className="mt-2 font-display text-xl text-gradient-violet">LiteForge</div>
-        </div>
-        <div className="panel p-4">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Chain ID</div>
-          <div className="mt-2 font-display text-xl text-foreground">4441</div>
-        </div>
-        <div className="panel p-4">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Rollup</div>
-          <div className="mt-2 font-display text-xl text-secondary">Arbitrum Orbit</div>
-        </div>
-        <div className="panel p-4">
-          <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Native Token</div>
-          <div className="mt-2 font-display text-xl text-fire">zkLTC</div>
-        </div>
-      </div>
+      {/* Main 3-column dashboard grid: charts (2/3) + side rail (1/3) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        {/* MIDDLE: Charts + Activity (2/3) */}
+        <div className="space-y-6 lg:col-span-2">
+          {/* Quick stats row */}
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <StatPill label="Latest Block" value={fmtNum(latestBlock)} icon={Boxes} />
+            <StatPill label="Avg Block" value={avgBlockTime ? `${avgBlockTime.toFixed(2)}s` : "—"} icon={Activity} />
+            <StatPill label="Gas (Gwei)" value={gasPriceGwei != null ? gasPriceGwei.toFixed(3) : "—"} icon={Zap} />
+            <StatPill label="Recent TXs" value={fmtNum(recentTxs)} icon={ArrowLeftRight} />
+          </div>
 
-      {/* Live stats */}
-      <div>
-        <h2 className="mb-4 flex items-center gap-2 font-display text-2xl">
-          <TrendingUp className="h-5 w-5 text-primary" /> Live Network Stats
-        </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Latest Block" value={fmtNum(latestBlock)} accent="primary" icon={Boxes} />
-          <StatCard label="Avg Block Time" value={avgBlockTime ? `${avgBlockTime.toFixed(2)} s` : "—"} accent="secondary" icon={Activity} />
-          <StatCard label="Gas Price" value={gasPriceGwei != null ? `${gasPriceGwei.toFixed(3)} Gwei` : "—"} accent="gold" icon={Zap} />
-          <StatCard label={`Recent TXs (${blocks.length} blk)`} value={fmtNum(recentTxs)} accent="green" icon={ArrowLeftRight} />
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total TXNs (est.)" value={totalEst} hint="Extrapolated from recent activity" accent="primary" icon={Database} />
+          {/* Block production chart */}
           <div className="panel p-5">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">RPC Status</div>
-            <div className="mt-3 flex items-center gap-2 font-display text-2xl text-green">
-              <span className="status-dot" /> Healthy
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Block Production</div>
+                <div className="num mt-1 text-2xl font-semibold text-foreground">
+                  {blocks.length || 16} <span className="text-sm text-muted-foreground">blocks</span>
+                </div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                Realtime
+              </div>
             </div>
-          </div>
-          <div className="panel p-5">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Native Token</div>
-            <div className="mt-3 font-display text-2xl text-gradient-fire">zkLTC</div>
-          </div>
-          <div className="panel p-5">
-            <div className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Explorer</div>
-            <div className="mt-3 font-display text-2xl text-secondary">LiteForge</div>
-            <div className="mt-1 text-[11px] text-muted-foreground">Powered by Caldera</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div>
-        <h2 className="mb-4 flex items-center gap-2 font-display text-2xl">
-          <Activity className="h-5 w-5 text-primary" /> Network Activity
-        </h2>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="panel p-5">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <Boxes className="h-4 w-4 text-primary" /> Block Production (last {blocks.length || 16})
-            </div>
-            <div className="h-64">
+            <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={blocks.map((b) => ({ x: `#${b.number}`, v: 1 }))}>
+                <AreaChart data={blocks.map((b) => ({ x: `#${b.number}`, v: 1 }))} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="prodGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.6} />
-                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.05} />
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.35} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="x" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} />
+                  <CartesianGrid horizontal={false} strokeDasharray="0" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="x" tick={false} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} />
                   <Area type="monotone" dataKey="v" stroke="hsl(var(--primary))" strokeWidth={2} fill="url(#prodGrad)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
+          {/* TX volume chart */}
           <div className="panel p-5">
-            <div className="mb-3 flex items-center gap-2 text-sm font-semibold">
-              <ArrowLeftRight className="h-4 w-4 text-secondary" /> Transaction Volume (last {blocks.length || 16} blk)
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Transaction Volume</div>
+                <div className="num mt-1 text-2xl font-semibold text-foreground">{fmtNum(recentTxs)}</div>
+              </div>
+              <div className="rounded-lg border border-border bg-surface px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                Last {blocks.length || 16}
+              </div>
             </div>
-            <div className="h-64">
+            <div className="h-56">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={blocks.map((b) => ({ x: `#${b.number}`, v: b.txs }))}>
+                <BarChart data={blocks.map((b) => ({ x: `#${b.number}`, v: b.txs }))} margin={{ top: 5, right: 0, left: 0, bottom: 0 }}>
                   <defs>
                     <linearGradient id="txGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="hsl(var(--secondary))" stopOpacity={0.9} />
-                      <stop offset="100%" stopColor="hsl(var(--secondary))" stopOpacity={0.3} />
+                      <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.9} />
+                      <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="x" tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} interval="preserveStartEnd" />
-                  <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }} />
-                  <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, color: "hsl(var(--foreground))" }} />
-                  <Bar dataKey="v" fill="url(#txGrad)" radius={[4, 4, 0, 0]} />
+                  <CartesianGrid horizontal={false} strokeDasharray="0" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="x" tick={false} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10, fontFamily: "JetBrains Mono" }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="v" fill="url(#txGrad)" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
         </div>
+
+        {/* RIGHT: Live stats + swap shortcut (1/3) */}
+        <aside className="space-y-6">
+          {/* Network meta card */}
+          <div className="panel p-5">
+            <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              <TrendingUp className="h-3 w-3 text-primary" /> Network
+            </div>
+            <MetricRow label="Network" value="LiteForge" accent="primary" />
+            <MetricRow label="Chain ID" value="4441" />
+            <MetricRow label="Native" value="zkLTC" />
+            <MetricRow label="Rollup" value="Arbitrum Orbit" />
+            <MetricRow label="Total TXNs (est)" value={totalEst} />
+          </div>
+
+          {/* Swap shortcut card */}
+          <div className="panel-elevated p-5">
+            <div className="mb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-primary">
+                <ArrowLeftRight className="h-3 w-3" /> Quick Swap
+              </div>
+              <Link to="/swap" className="text-[11px] text-muted-foreground hover:text-primary">
+                Open <ArrowUpRight className="inline h-3 w-3" />
+              </Link>
+            </div>
+            <div className="space-y-2">
+              <div className="rounded-lg border border-border bg-background/60 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">From</div>
+                <div className="num mt-1 text-lg font-semibold text-foreground">zkLTC</div>
+              </div>
+              <div className="rounded-lg border border-border bg-background/60 p-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">To</div>
+                <div className="num mt-1 text-lg font-semibold text-foreground">Any LitVM token</div>
+              </div>
+              <Link to="/swap" className="btn-primary mt-2 h-11 w-full text-sm">
+                Open Swap
+              </Link>
+              <Link to="/pool" className="btn-secondary h-11 w-full text-sm">
+                <Droplets className="h-4 w-4" /> Provide Liquidity
+              </Link>
+            </div>
+          </div>
+
+          {/* RPC status */}
+          <div className="panel p-5">
+            <div className="text-xs uppercase tracking-[0.2em] text-muted-foreground">RPC Status</div>
+            <div className="mt-2 flex items-center gap-2 text-base font-semibold text-primary">
+              <span className="status-dot" /> Healthy
+            </div>
+            <div className="num mt-3 truncate text-[11px] text-muted-foreground">
+              liteforge.rpc.caldera.xyz
+            </div>
+          </div>
+        </aside>
       </div>
 
       {/* Quick links */}
@@ -182,9 +211,9 @@ export default function Home() {
           { title: "Explore Transactions", desc: "Recent transfers, swaps and contract calls.", to: "/transactions" },
           { title: "Open Terminal", desc: "Wallet, swap, balance — command-style.", to: "/terminal" },
         ].map((c) => (
-          <Link key={c.to} to={c.to} className="panel group flex items-center justify-between p-5 transition-all hover:border-primary/60 hover:shadow-glow-violet/40">
+          <Link key={c.to} to={c.to} className="panel group flex items-center justify-between p-5 transition-colors hover:border-primary/60">
             <div>
-              <div className="font-display text-xl text-gradient-violet">{c.title}</div>
+              <div className="font-display text-base font-semibold text-foreground group-hover:text-primary">{c.title}</div>
               <div className="mt-1 text-xs text-muted-foreground">{c.desc}</div>
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary" />
