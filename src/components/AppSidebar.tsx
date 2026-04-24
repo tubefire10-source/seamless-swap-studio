@@ -27,6 +27,7 @@ import {
   Rocket,
   Sparkles,
   Hammer,
+  Droplets,
 } from "lucide-react";
 
 const explorerItems = [
@@ -40,6 +41,7 @@ const explorerItems = [
 
 const chainItems = [
   { title: "Swap", url: "/swap", icon: ArrowLeftRight },
+  { title: "Pool", url: "/pool", icon: Droplets },
   { title: "Deploy Token", url: "/deploy", icon: Rocket },
   { title: "Deploy Contract", url: "/forge", icon: Hammer },
   { title: "Terminal", url: "/terminal", icon: Zap },
